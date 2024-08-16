@@ -1,0 +1,12 @@
+mongo0_host: mongo0.replset.member
+mongo1_host: mongo1.replset.member
+mongo0_ipv4_address: 18.136.100.196
+mongo1_ipv4_address: 13.213.57.181
+mongodb_port: 27017
+mongodb_repl_set_name: rs0
+mongodb_repl_set_members:
+  - { host: "{{ mongo0_host }}:{{ mongodb_port }}", priority: 2 }  # mongo0
+  - { host: "{{ mongo1_host }}:{{ mongodb_port }}", priority: 1 }  # mongo1
+
+mongodb_admin_user: admin
+mongodb_admin_password: admin

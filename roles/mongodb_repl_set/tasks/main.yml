@@ -1,0 +1,93 @@
+---
+- name: Add MongoDB hosts to /etc/hosts
+  ansible.builtin.shell:
+    printf "\n# Mongodb Replica Sets\n{{ mongo0_ipv4_address }} {{ mongo0_host }}\n{{ mongo1_ipv4_address }} {{ mongo1_host }}\n" >> /etc/hosts
+  
+- name: Update configuration file
+  ansible.builtin.template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: mongodb
+    group: mongodb
+    mode: 0644
+
+- name: restart mongod
+  service:
+    name: mongod
+    state: restarted
+
+# - name: Configure UFW to allow MongoDB traffic
+#   ufw:
+#     rule: allow
+#     from_ip: "{{ item }}"
+#     to_port: 27017
+#     state: enabled
+#   loop: "{{ groups['mongo'] | map('extract', hostvars, 'ansible_host') | list }}"
+#   when: inventory_hostname in groups['mongo'] and ansible_host != item
+
+- name: Initialize the replica set
+  shell: |
+    mongosh --eval 'rs.initiate({ _id: "{{ mongodb_repl_set_name }}", members: [{ _id: 0, host: "{{ mongo0_host }}:{{ mongodb_port }}", priority: 2 }, { _id: 1, host: "{{ mongo1_host }}:{{ mongodb_port }}", priority: 1 }] })'
+  when: inventory_hostname == "mongo0"
+  register: rs_initiate_result
+  failed_when: rs_initiate_result.rc != 0 and '"already initialized"' not in rs_initiate_result.stdout
+  ignore_errors: true
+
+- name: Debug rs.initiate result
+  debug:
+    var: rs_initiate_result.stdout
+  when: rs_initiate_result.changed
+
+- name: Wait for MongoDB to be primary
+  shell: |
+    until mongosh --quiet --eval 'db.isMaster().ismaster' | grep 'true'; do
+      sleep 5
+    done
+  delegate_to: mongo0
+  retries: 20
+  delay: 15
+  register: wait_primary_result
+  until: wait_primary_result.stdout.find('true') != -1
+  ignore_errors: true
+
+- name: Debug wait_primary_result
+  debug:
+    var: wait_primary_result
+  when: wait_primary_result.failed == false
+
+- name: Add members to the replica set
+  shell: |
+    mongosh --eval 'rs.add("{{ item.host }}")'
+  with_items: "{{ mongodb_repl_set_members }}"
+  when: inventory_hostname == "mongo0"
+  ignore_errors: true
+
+- name: Check if MongoDB admin user exists
+  shell: |
+    mongosh admin --quiet --eval 'db.system.users.find({user: "admin"}).count()'
+  register: admin_user_check
+  ignore_errors: true
+
+- name: Create MongoDB admin user using mongosh
+  shell: |
+    mongosh admin --eval '
+    db.createUser({
+      user: "{{ mongodb_admin_user }}",
+      pwd: "{{ mongodb_admin_password }}",
+      roles: [{ role: "root", db: "admin" }]
+    })'
+  when:
+    - inventory_hostname == "mongo0"
+    - admin_user_check.stdout == "0"
+  ignore_errors: true
+
+- name: Check if MongoDB admin user exists
+  shell: |
+    mongosh admin --quiet --eval 'db.system.users.find({user: "admin"}).count()'
+  register: admin_user_check
+  ignore_errors: true
+
+- name: Debug admin_user_check
+  debug:
+    var: admin_user_check
+  when: admin_user_check.failed == false

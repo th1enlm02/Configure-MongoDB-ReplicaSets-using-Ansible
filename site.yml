@@ -1,0 +1,7 @@
+- name: Install MongoDB & Configure MongoDB replica sets
+  gather_facts: yes
+  become: yes
+  hosts: mongo
+  roles: 
+    - mongodb
+    - mongodb_repl_set
