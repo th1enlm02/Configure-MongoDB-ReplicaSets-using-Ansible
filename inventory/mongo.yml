@@ -3,12 +3,7 @@ mongo:
     mongo0:
       ansible_host: 18.136.100.196
       ansible_user: ubuntu
-      # ansible_password: Atom@2024
-      # ansible_become: yes
-      # ansible_become_password: Atom@2024
+      
     mongo1:
       ansible_host: 13.213.57.181
       ansible_user: ubuntu
-      # ansible_password: Atom@2024
-      # ansible_become: yes
-      # ansible_become_password: Atom@2024
